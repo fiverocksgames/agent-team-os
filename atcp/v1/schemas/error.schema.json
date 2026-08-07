@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atos.dev/atcp/v1/error.schema.json",
+  "$id": "urn:atos:atcp:v1:error",
   "title": "ATCP v1 ERROR",
   "type": "object",
   "additionalProperties": false,
@@ -13,7 +13,7 @@
     "task_id": {"type": "string", "minLength": 1},
     "from": {"type": "string", "minLength": 1},
     "to": {"type": "string", "minLength": 1},
-    "created_at": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
     "in_reply_to": {"type": ["string", "null"]},
     "error_class": {"enum": ["INVALID_TASK", "MISSING_INPUT", "PERMISSION", "TOOL_FAILURE", "TIMEOUT", "ENVIRONMENT", "VALIDATION_FAILURE", "INTERNAL"]},
     "summary": {"type": "string"},
