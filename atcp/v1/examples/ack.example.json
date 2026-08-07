@@ -1,0 +1,15 @@
+{
+  "protocol": "ATCP-1",
+  "message_type": "ACK",
+  "message_id": "MSG-TEST-ACK-001",
+  "conversation_id": "CONV-TEST-001",
+  "task_id": "TASK-TEST-001",
+  "from": "Antigravity-TL",
+  "to": "ChatGPT-Architect",
+  "created_at": "2026-08-08T00:00:01Z",
+  "in_reply_to": "MSG-TEST-001",
+  "accepted": true,
+  "state": "ACCEPTED",
+  "summary": "Task accepted for transport validation only; no project modifications will be made.",
+  "missing_inputs": []
+}
