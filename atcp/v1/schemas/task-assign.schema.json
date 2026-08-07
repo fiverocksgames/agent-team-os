@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://atos.dev/atcp/v1/task-assign.schema.json",
+  "$id": "urn:atos:atcp:v1:task-assign",
   "title": "ATCP v1 TASK_ASSIGN",
   "type": "object",
   "additionalProperties": false,
@@ -13,7 +13,7 @@
     "task_id": {"type": "string", "minLength": 1},
     "from": {"type": "string", "minLength": 1},
     "to": {"type": "string", "minLength": 1},
-    "created_at": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
     "in_reply_to": {"type": ["string", "null"]},
     "objective": {"type": "string", "minLength": 1},
     "scope": {"type": "array", "items": {"type": "string"}},
