@@ -5,7 +5,7 @@ This file is a reference snippet for adopting projects. It is not intended to re
 A project can add a short pointer such as:
 
 ```markdown
-## Agent Team Operating Standard
+## Agent Team Operating System
 
 This project follows the Agent Team Operating System (ATOS) reference standard maintained in `fiverocksgames/agent-team-os`.
 
