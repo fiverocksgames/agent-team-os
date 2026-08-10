@@ -12,6 +12,25 @@ Validate the minimum ATCP round trip between a parent Architect and a local Anti
 - The local Antigravity CLI account is authenticated.
 - The repository/branch containing this document and the ATCP v1 schemas is available locally.
 - No production or project files need to be modified for this test.
+- Proxy/network settings used by the validation process are understood and recorded when relevant.
+
+## Permission model
+
+Antigravity CLI tool permission is part of the transport/execution environment and must not be confused with ATCP task authority.
+
+Observed/default `request-review` behavior can block headless `--print` execution when the agent attempts a tool call because no interactive permission prompt is available.
+
+For unattended validation, prefer a non-persistent sandboxed execution experiment before considering broader permission changes:
+
+1. keep host/persistent permission settings unchanged;
+2. use a clean child process with only known invalid process-scoped proxy variables removed when required;
+3. test the CLI `--sandbox` flag in combination with `--print`;
+4. keep the ATCP task authority non-mutating;
+5. do not use `--dangerously-skip-permissions` for ATCP conformance validation.
+
+Google's Antigravity CLI documentation also describes a `proceed-in-sandbox` Tool Permission setting that automatically executes terminal commands only in an isolated sandbox. Changing a persistent CLI permission setting is a separate operational decision and is not required merely to define ATCP.
+
+A headless permission blocker is an execution-mode result (`BLOCKED`), not an ATCP protocol failure, unless the integration claims unsupported unattended capability.
 
 ## Test A — structured ACK
 
@@ -30,6 +49,8 @@ agy --print `
   "You are the Technical Lead boundary of an independent AI development team. Acknowledge TASK-TEST-001 only. Do not modify files, commit, create a PR, or start implementation. Preserve conversation_id CONV-TEST-001 and return an ATCP-1 ACK for ChatGPT-Architect."
 ```
 
+If default headless execution is blocked by a tool permission request, repeat the same non-mutating test with the installed CLI's `--sandbox` flag. Record sandbox use explicitly.
+
 Important: use the exact options supported by the installed `agy --help`. If the CLI states that schema enforcement only applies to `stream-json`, adapt the output mode accordingly and record that compatibility fact.
 
 ## Pass criteria
@@ -45,6 +66,8 @@ The test passes only if:
 7. `conversation_id == CONV-TEST-001`;
 8. the response does not claim implementation occurred;
 9. no project files were modified.
+
+If a sandbox is used, host project files must remain unchanged and the evidence record must identify the sandboxed execution mode.
 
 ## Test B — malformed identity rejection
 
@@ -68,6 +91,8 @@ agy_version: <version>
 model: <reported model>
 mode: <mode>
 effort: <effort>
+sandbox: true | false
+permission_mode: <observed/configured mode or unknown>
 schema: atcp/v1/schemas/ack.schema.json
 result: PASS | FAIL | BLOCKED
 observed_output_format: <text|json|stream-json>
@@ -80,3 +105,5 @@ Do not record account secrets, tokens, raw credentials, or unrelated private CLI
 ## Interpretation
 
 A successful ACK proves only that the installed Antigravity CLI can participate in the minimum structured ATCP acknowledgement flow under the tested configuration. It does not prove STATUS, RESULT, cancellation, persistent-conversation behavior, or production safety.
+
+A BLOCKED result caused by proxy, permission prompting, sandbox availability, authentication, or other transport/runtime constraints should be recorded separately from schema/protocol validity.
