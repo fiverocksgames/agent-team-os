@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atos:atcp:v1:cancel",
+  "title": "ATCP v1 CANCEL",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "message_type", "message_id", "conversation_id", "task_id", "from", "to", "created_at", "reason", "preserve_outputs"],
+  "properties": {
+    "protocol": {"const": "ATCP-1"},
+    "message_type": {"const": "CANCEL"},
+    "message_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "from": {"type": "string", "minLength": 1},
+    "to": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "in_reply_to": {"type": ["string", "null"]},
+    "reason": {"type": "string"},
+    "preserve_outputs": {"type": "boolean"}
+  }
+}

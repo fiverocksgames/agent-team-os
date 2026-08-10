@@ -1,0 +1,27 @@
+{
+  "protocol": "ATCP-1",
+  "message_type": "TASK_ASSIGN",
+  "message_id": "MSG-TEST-001",
+  "conversation_id": "CONV-TEST-001",
+  "task_id": "TASK-TEST-001",
+  "from": "ChatGPT-Architect",
+  "to": "Antigravity-TL",
+  "created_at": "2026-08-08T00:00:00Z",
+  "in_reply_to": null,
+  "objective": "Acknowledge the integration test without modifying any project files.",
+  "scope": ["ATCP transport validation only"],
+  "deliverables": ["One schema-valid ACK payload"],
+  "constraints": ["Do not modify files", "Do not create commits", "Do not start implementation"],
+  "acceptance_criteria": ["ACK preserves task_id TASK-TEST-001", "ACK is valid against ack.schema.json"],
+  "references": [],
+  "authority": {
+    "may_modify": false,
+    "may_commit": false,
+    "may_open_pr": false,
+    "may_merge": false
+  },
+  "reporting": {
+    "status_requested": false,
+    "result_required": false
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atos:atcp:v1:ack",
+  "title": "ATCP v1 ACK",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "message_type", "message_id", "conversation_id", "task_id", "from", "to", "created_at", "accepted", "state", "summary", "missing_inputs"],
+  "properties": {
+    "protocol": {"const": "ATCP-1"},
+    "message_type": {"const": "ACK"},
+    "message_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "from": {"type": "string", "minLength": 1},
+    "to": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "in_reply_to": {"type": ["string", "null"]},
+    "accepted": {"type": "boolean"},
+    "state": {"enum": ["ACCEPTED", "BLOCKED", "REJECTED"]},
+    "summary": {"type": "string"},
+    "missing_inputs": {"type": "array", "items": {"type": "string"}}
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atos:atcp:v1:status",
+  "title": "ATCP v1 STATUS",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "message_type", "message_id", "conversation_id", "task_id", "from", "to", "created_at", "state", "completed", "active_workstreams", "blockers", "risks", "next_checkpoint"],
+  "properties": {
+    "protocol": {"const": "ATCP-1"},
+    "message_type": {"const": "STATUS"},
+    "message_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "from": {"type": "string", "minLength": 1},
+    "to": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "in_reply_to": {"type": ["string", "null"]},
+    "state": {"enum": ["PLANNING", "IMPLEMENTING", "VERIFYING", "BLOCKED", "WAITING_FOR_INPUT", "CANCELLING"]},
+    "completed": {"type": "array", "items": {"type": "string"}},
+    "active_workstreams": {"type": "array", "items": {"type": "string"}},
+    "blockers": {"type": "array", "items": {"type": "string"}},
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "requested_input": {"type": ["string", "null"]},
+    "next_checkpoint": {"type": "string"}
+  }
+}

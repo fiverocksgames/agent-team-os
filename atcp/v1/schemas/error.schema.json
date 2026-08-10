@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atos:atcp:v1:error",
+  "title": "ATCP v1 ERROR",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "message_type", "message_id", "conversation_id", "task_id", "from", "to", "created_at", "error_class", "summary", "retry_safe", "intervention_required", "preserved_state", "recommended_recovery"],
+  "properties": {
+    "protocol": {"const": "ATCP-1"},
+    "message_type": {"const": "ERROR"},
+    "message_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "from": {"type": "string", "minLength": 1},
+    "to": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "in_reply_to": {"type": ["string", "null"]},
+    "error_class": {"enum": ["INVALID_TASK", "MISSING_INPUT", "PERMISSION", "TOOL_FAILURE", "TIMEOUT", "ENVIRONMENT", "VALIDATION_FAILURE", "INTERNAL"]},
+    "summary": {"type": "string"},
+    "retry_safe": {"type": "boolean"},
+    "intervention_required": {"type": "boolean"},
+    "preserved_state": {"type": "array", "items": {"type": "string"}},
+    "recommended_recovery": {"type": "string"}
+  }
+}

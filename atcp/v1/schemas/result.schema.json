@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atos:atcp:v1:result",
+  "title": "ATCP v1 RESULT",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "message_type", "message_id", "conversation_id", "task_id", "from", "to", "created_at", "status", "summary", "deliverables", "validation", "unverified", "risks", "recommended_next_action"],
+  "properties": {
+    "protocol": {"const": "ATCP-1"},
+    "message_type": {"const": "RESULT"},
+    "message_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "from": {"type": "string", "minLength": 1},
+    "to": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "in_reply_to": {"type": ["string", "null"]},
+    "status": {"enum": ["PASS", "PARTIAL", "BLOCKED", "CANCELLED"]},
+    "summary": {"type": "string"},
+    "deliverables": {"type": "array", "items": {"type": "string"}},
+    "changes": {"type": "array", "items": {"type": "string"}},
+    "validation": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "string"}},
+    "unverified": {"type": "array", "items": {"type": "string"}},
+    "risks": {"type": "array", "items": {"type": "string"}},
+    "recommended_next_action": {"type": "string"}
+  }
+}

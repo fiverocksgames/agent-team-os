@@ -43,9 +43,13 @@ Projects may add domain roles, but these generic responsibilities should remain 
 
 Owns final product/project authority and conflict resolution.
 
-### Orchestrator / Architect
+### Lead Architect / Meta-Orchestrator
 
-Owns planning, impact analysis, assignment, coordination, dependency-aware validation selection, and escalation. The orchestrator must not silently expand project scope or self-grant PL authority.
+Owns planning, impact analysis, assignment, cross-team coordination, dependency-aware validation selection, and escalation. The Architect must not silently expand project scope or self-grant PL authority.
+
+### Team Lead
+
+Owns one independent team's internal execution and acts as that team's public boundary. The Team Lead may coordinate that team's internal Developer, QA, Designer, or specialist agents. A parent Architect communicates with the Team Lead rather than micromanaging those internal agents.
 
 ### Developer
 
@@ -58,6 +62,10 @@ Independently verifies requirements, behavior, regressions, evidence, and residu
 ### Design / Experience Reviewer
 
 Verifies user-facing design concerns when relevant: visual coherence, UX, accessibility, interaction, and presentation. Projects may rename or specialize this role.
+
+### Independent Reviewer
+
+Optional final review role used when project risk or policy justifies independent evidence-based judgment after implementation and required verification. The Reviewer does not become a second orchestrator and routes rework through the responsible Architect or Team Lead.
 
 ### Archivist / Historian
 

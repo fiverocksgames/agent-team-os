@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:atos:atcp:v1:task-assign",
+  "title": "ATCP v1 TASK_ASSIGN",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocol", "message_type", "message_id", "conversation_id", "task_id", "from", "to", "created_at", "objective", "scope", "deliverables", "constraints", "acceptance_criteria", "authority"],
+  "properties": {
+    "protocol": {"const": "ATCP-1"},
+    "message_type": {"const": "TASK_ASSIGN"},
+    "message_id": {"type": "string", "minLength": 1},
+    "conversation_id": {"type": "string", "minLength": 1},
+    "task_id": {"type": "string", "minLength": 1},
+    "from": {"type": "string", "minLength": 1},
+    "to": {"type": "string", "minLength": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "in_reply_to": {"type": ["string", "null"]},
+    "objective": {"type": "string", "minLength": 1},
+    "scope": {"type": "array", "items": {"type": "string"}},
+    "deliverables": {"type": "array", "items": {"type": "string"}},
+    "constraints": {"type": "array", "items": {"type": "string"}},
+    "acceptance_criteria": {"type": "array", "items": {"type": "string"}, "minItems": 1},
+    "references": {"type": "array", "items": {"type": "string"}},
+    "authority": {"type": "object", "additionalProperties": false, "required": ["may_modify", "may_commit", "may_open_pr", "may_merge"], "properties": {
+      "may_modify": {"type": "boolean"},
+      "may_commit": {"type": "boolean"},
+      "may_open_pr": {"type": "boolean"},
+      "may_merge": {"type": "boolean"}
+    }},
+    "reporting": {"type": "object", "additionalProperties": false, "properties": {
+      "status_requested": {"type": "boolean"},
+      "result_required": {"type": "boolean"}
+    }}
+  }
+}
