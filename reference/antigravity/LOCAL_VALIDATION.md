@@ -13,27 +13,33 @@ Validate the minimum ATCP round trip between a parent Architect and a local Anti
 - The repository/branch containing this document and the ATCP v1 schemas is available locally.
 - No production or project files need to be modified for this test.
 
-## Important permission-model distinction
+## Permission-model findings
 
-Antigravity CLI has two separate concepts that must not be conflated:
+Do not assume that Antigravity Desktop/IDE project Security Presets and Antigravity CLI Tool Permission are the same configuration surface.
 
-1. CLI `--sandbox`: starts the CLI with terminal restrictions / sandbox execution enabled.
-2. Persistent Tool Permission setting: controls whether tool calls are automatically allowed or require review.
+Observed locally:
 
-Observed with `agy` 1.1.11: `--sandbox --print` did **not** override the default `request-review` Tool Permission mode. In headless print mode, a required Bash/tool confirmation was automatically denied because no interactive approval channel was available.
+- Antigravity Desktop 2.5.0 exposed project-level `Security Preset` values `Default`, `Full machine`, `Turbo mode`, and `Custom`.
+- Under `Custom`, the Desktop UI exposed `Terminal Command Auto Execution` separately from other file/network/tooling controls.
+- The operator's Desktop project was already using `Turbo Mode`; inspecting Custom showed terminal auto execution as `Always Proceed`.
+- Despite that Desktop configuration, `agy` 1.1.11 headless `--print` still denied a required Bash/tool confirmation.
 
-Therefore ATOS must not treat `--sandbox` alone as sufficient for unattended execution.
+Official Antigravity CLI documentation describes a separate CLI `Tool Permission` setting stored with CLI configuration and reachable through CLI `/config` or `/settings`:
 
-Official Antigravity documentation describes these Tool Permission modes:
+- `request-review`: prompt before permission-requiring actions;
+- `proceed-in-sandbox`: automatically execute terminal commands in the CLI sandbox;
+- `always-proceed`: automatically execute with host permissions;
+- `strict`: automatically permit only read tools and prompt for non-read tools.
 
-- `request-review`: prompts for actions requiring permission;
-- `proceed-in-sandbox`: automatically executes terminal commands inside the isolated sandbox;
-- `always-proceed`: automatically executes with host permissions;
-- `strict`: limits automatic activity to read tools and prompts for non-read tools.
+The CLI also exposes `--sandbox`, which enables terminal restrictions, but observed `--sandbox --print` did not itself eliminate the headless approval blocker.
 
-For unattended ATOS reference validation, `proceed-in-sandbox` is the preferred candidate to test. `always-proceed` and `--dangerously-skip-permissions` are not required by this reference validation and must not be used as a shortcut.
+Therefore:
 
-Changing Tool Permission is a security-relevant local configuration change and requires explicit operator approval before validation proceeds.
+1. ATOS MUST NOT infer CLI Tool Permission from Desktop/IDE Security Preset.
+2. ATOS MUST NOT treat CLI `--sandbox` as equivalent to `proceed-in-sandbox`.
+3. Desktop Security Preset changes are not part of this CLI validation procedure.
+4. `always-proceed` and `--dangerously-skip-permissions` MUST NOT be introduced merely to make the reference validation pass.
+5. A future CLI Tool Permission test should change the CLI configuration surface itself (`agy` `/config` or `/settings`, or a documented CLI configuration mechanism), not the Desktop project Security Preset.
 
 ## Test A — structured ACK
 
@@ -86,7 +92,7 @@ Verify that a task with all authority flags false is not treated as permission t
 
 Do not use `--dangerously-skip-permissions` for this validation.
 
-If the operator explicitly approves temporary `proceed-in-sandbox` configuration for this test, record both the pre-test setting and restoration outcome. The validation should restore the previous Tool Permission setting after completion unless the operator explicitly chooses to adopt the new setting.
+Any CLI Tool Permission mutation is security-relevant and requires explicit operator approval. Record the pre-test CLI value and restore it after testing unless the operator explicitly adopts the new value.
 
 ## Test record
 
@@ -97,7 +103,8 @@ transport: antigravity-cli
 agy_version: <version>
 model: <reported model>
 cli_sandbox: true | false
-tool_permission: request-review | proceed-in-sandbox | always-proceed | strict | unknown
+cli_tool_permission: request-review | proceed-in-sandbox | always-proceed | strict | unknown
+desktop_security_preset: <observed value, if relevant>
 schema: atcp/v1/schemas/ack.schema.json
 result: PASS | FAIL | BLOCKED
 observed_output_format: <text|json|stream-json>
