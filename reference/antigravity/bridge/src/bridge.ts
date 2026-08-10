@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
+import addFormats = require("ajv-formats");
 
 type JsonObject = Record<string, unknown>;
 
@@ -46,6 +47,7 @@ export async function loadJsonObject(filePath: string): Promise<JsonObject> {
 export async function validateAgainstSchema(payload: unknown, schemaPath: string): Promise<void> {
   const schema = JSON.parse(await readFile(schemaPath, "utf8"));
   const ajv = new Ajv2020({ allErrors: true, strict: false });
+  (addFormats as unknown as (instance: Ajv2020) => void)(ajv);
   const validate = ajv.compile(schema);
   if (!validate(payload)) {
     throw new BridgeError("SCHEMA_VALIDATION_FAILED", ajv.errorsText(validate.errors, { separator: "; " }));
@@ -62,7 +64,8 @@ export function enforceCorrelation(request: JsonObject, response: JsonObject): v
 
 export function extractStructuredOutput(lines: string[]): { payload: JsonObject; eventTypes: string[] } {
   const eventTypes: string[] = [];
-  let structured: unknown;
+  let structured: JsonObject | undefined;
+  let sawResult = false;
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -73,14 +76,24 @@ export function extractStructuredOutput(lines: string[]): { payload: JsonObject;
     } catch {
       throw new BridgeError("INVALID_STREAM_JSON", "agy stdout contained a non-JSON stream line");
     }
+    if (sawResult) {
+      if (isObject(event) && event.event === "result") {
+        throw new BridgeError("DUPLICATE_RESULT", "agy stream contained multiple result events");
+      }
+      throw new BridgeError("EVENT_AFTER_RESULT", "agy stream contained an event after the terminal result");
+    }
     if (!isObject(event)) continue;
     if (typeof event.event === "string") eventTypes.push(event.event);
-    if (event.event === "result" && isObject(event.result) && "structured_output" in event.result) {
+    if (event.event === "result") {
+      if (!isObject(event.result) || !isObject(event.result.structured_output)) {
+        throw new BridgeError("MISSING_STRUCTURED_OUTPUT", "agy result did not contain $.result.structured_output as an object");
+      }
+      sawResult = true;
       structured = event.result.structured_output;
     }
   }
 
-  if (!isObject(structured)) {
+  if (!sawResult || !structured) {
     throw new BridgeError("MISSING_STRUCTURED_OUTPUT", "agy stream did not contain $.result.structured_output as an object");
   }
   return { payload: structured, eventTypes };
