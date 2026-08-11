@@ -1,5 +1,5 @@
 import path from "node:path";
-import { dispatchAck, dispatchLifecycle, loadJsonObject } from "./bridge.js";
+import { dispatchAck, dispatchLifecycle, loadJsonObject, type TerminalOutcome } from "./bridge.js";
 
 interface Args {
   task?: string;
@@ -8,6 +8,8 @@ interface Args {
   taskSchema?: string;
   responseSchema?: string;
   resultSchema?: string;
+  errorSchema?: string;
+  terminal?: TerminalOutcome;
   phase?: "ack" | "lifecycle";
   timeoutMs?: number;
   model?: string;
@@ -28,6 +30,11 @@ function parseArgs(argv: string[]): Args {
       case "--task-schema": out.taskSchema = value; break;
       case "--response-schema": out.responseSchema = value; break;
       case "--result-schema": out.resultSchema = value; break;
+      case "--error-schema": out.errorSchema = value; break;
+      case "--terminal":
+        if (value !== "result" && value !== "error") throw new Error("--terminal must be result|error");
+        out.terminal = value.toUpperCase() as TerminalOutcome;
+        break;
       case "--phase":
         if (value !== "ack" && value !== "lifecycle") throw new Error("--phase must be ack|lifecycle");
         out.phase = value;
@@ -56,6 +63,7 @@ async function main(): Promise<void> {
   const taskSchema = args.taskSchema ?? path.join(repoRoot, "atcp", "v1", "schemas", "task-assign.schema.json");
   const responseSchema = args.responseSchema ?? path.join(repoRoot, "atcp", "v1", "schemas", "ack.schema.json");
   const resultSchema = args.resultSchema ?? path.join(repoRoot, "atcp", "v1", "schemas", "result.schema.json");
+  const errorSchema = args.errorSchema ?? path.join(repoRoot, "atcp", "v1", "schemas", "error.schema.json");
 
   const task = await loadJsonObject(path.resolve(args.task));
   const config = {
@@ -70,11 +78,12 @@ async function main(): Promise<void> {
   };
 
   if (args.phase === "lifecycle") {
-    const lifecycle = await dispatchLifecycle(task, config, resultSchema);
+    const terminalOutcome = args.terminal ?? "RESULT";
+    const lifecycle = await dispatchLifecycle(task, config, terminalOutcome === "RESULT" ? resultSchema : errorSchema, terminalOutcome);
     const { task: recordTask, authority: recordAuthority, ...recordEvidence } = lifecycle.record;
     process.stdout.write(`${JSON.stringify({
       status: "PASS",
-      lifecycle: { record: recordEvidence, ack: lifecycle.ack, result: lifecycle.result },
+      lifecycle: { record: recordEvidence, ack: lifecycle.ack, terminalOutcome: lifecycle.terminalOutcome, terminal: lifecycle.terminal },
     })}\n`);
     return;
   }

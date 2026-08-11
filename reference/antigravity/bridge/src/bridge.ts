@@ -6,6 +6,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormats = require("ajv-formats");
 
 type JsonObject = Record<string, unknown>;
+export type TerminalOutcome = "RESULT" | "ERROR";
 
 export interface DispatchConfig {
   agyPath: string;
@@ -46,7 +47,8 @@ export interface LifecycleRecord {
 export interface LifecycleDispatchResult {
   record: LifecycleRecord;
   ack: DispatchResult;
-  result: DispatchResult;
+  terminalOutcome: TerminalOutcome;
+  terminal: DispatchResult;
 }
 
 export class BridgeError extends Error {
@@ -152,10 +154,12 @@ export function extractStructuredOutput(lines: string[]): { payload: JsonObject;
   return { payload: structured, eventTypes };
 }
 
-export function buildTlPrompt(task: JsonObject, messageType: "ACK" | "RESULT" = "ACK"): string {
+export function buildTlPrompt(task: JsonObject, messageType: "ACK" | TerminalOutcome = "ACK"): string {
   const phaseInstruction = messageType === "ACK"
     ? "ACK-only: do not start implementation work."
-    : "RESULT-only: report bounded completion for the supplied task context; do not invent authority beyond it.";
+    : messageType === "RESULT"
+      ? "RESULT-only: report bounded completion for the supplied task context; do not invent authority beyond it."
+      : "ERROR-only: report a bounded external task failure for the supplied task context; do not invent authority beyond it.";
   return [
     "You are the public Technical Lead boundary of an independent Antigravity software team.",
     "Return only the schema-conforming ATCP response requested by this invocation.",
@@ -169,7 +173,7 @@ export function buildTlPrompt(task: JsonObject, messageType: "ACK" | "RESULT" = 
   ].join("\n");
 }
 
-async function dispatchResponse(task: JsonObject, config: DispatchConfig, messageType: "ACK" | "RESULT"): Promise<DispatchResult> {
+async function dispatchResponse(task: JsonObject, config: DispatchConfig, messageType: "ACK" | TerminalOutcome): Promise<DispatchResult> {
 
   const args = ["--output-format", "stream-json", "--json-schema", path.resolve(config.responseSchemaPath)];
   if (config.model) args.push("--model", config.model);
@@ -235,16 +239,22 @@ export async function dispatchAck(task: JsonObject, config: DispatchConfig): Pro
 }
 
 export async function dispatchResult(record: LifecycleRecord, config: DispatchConfig): Promise<DispatchResult> {
-  const resultConfig = { ...config, taskSchemaPath: config.taskSchemaPath };
-  return dispatchResponse(record.task, resultConfig, "RESULT");
+  return dispatchResponse(record.task, config, "RESULT");
 }
 
-export async function dispatchLifecycle(task: JsonObject, config: DispatchConfig, resultSchemaPath: string): Promise<LifecycleDispatchResult> {
+export async function dispatchError(record: LifecycleRecord, config: DispatchConfig): Promise<DispatchResult> {
+  return dispatchResponse(record.task, config, "ERROR");
+}
+
+export async function dispatchLifecycle(task: JsonObject, config: DispatchConfig, terminalSchemaPath: string, terminalOutcome: TerminalOutcome = "RESULT"): Promise<LifecycleDispatchResult> {
   const record = await createLifecycleRecord(task, config.taskSchemaPath);
   const ack = await dispatchResponse(record.task, config, "ACK");
   enforceAcceptedAck(ack.payload);
-  const result = await dispatchResult(record, { ...config, responseSchemaPath: resultSchemaPath });
-  return { record, ack, result };
+  const terminalConfig = { ...config, responseSchemaPath: terminalSchemaPath };
+  const terminal = terminalOutcome === "RESULT"
+    ? await dispatchResult(record, terminalConfig)
+    : await dispatchError(record, terminalConfig);
+  return { record, ack, terminalOutcome, terminal };
 }
 
 function isObject(value: unknown): value is JsonObject {
