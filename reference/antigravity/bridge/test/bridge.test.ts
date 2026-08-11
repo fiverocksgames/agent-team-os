@@ -12,6 +12,7 @@ const repoRoot = path.resolve(bridgeDir, "..", "..", "..");
 const taskSchema = path.join(repoRoot, "atcp", "v1", "schemas", "task-assign.schema.json");
 const ackSchema = path.join(repoRoot, "atcp", "v1", "schemas", "ack.schema.json");
 const resultSchema = path.join(repoRoot, "atcp", "v1", "schemas", "result.schema.json");
+const errorSchema = path.join(repoRoot, "atcp", "v1", "schemas", "error.schema.json");
 
 function invalidDateError(error: unknown): boolean {
   return error instanceof BridgeError && error.code === "SCHEMA_VALIDATION_FAILED";
@@ -156,6 +157,29 @@ test("does not spawn RESULT after a schema-valid blocked ACK", async () => {
   assert.equal(spawnCount, 1);
 });
 
+test("dispatches exactly one ERROR terminal after an accepted ACK", async () => {
+  const task = {
+    protocol: "ATCP-1", message_type: "TASK_ASSIGN", message_id: "M1", conversation_id: "C1", task_id: "T1",
+    from: "Architect", to: "Antigravity-TL", created_at: "2026-08-11T00:00:00Z", objective: "ACK then ERROR", scope: [], deliverables: [],
+    constraints: [], acceptance_criteria: ["ERROR"], authority: { may_modify: false, may_commit: false, may_open_pr: false, may_merge: false },
+  };
+  let spawnCount = 0;
+  const spawnProcess = (() => {
+    spawnCount += 1;
+    const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; kill: () => boolean };
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => true;
+    const payload = spawnCount === 1
+      ? { protocol: "ATCP-1", message_type: "ACK", message_id: "M2", conversation_id: "C1", task_id: "T1", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", accepted: true, state: "ACCEPTED", summary: "accepted", missing_inputs: [] }
+      : { protocol: "ATCP-1", message_type: "ERROR", message_id: "M3", conversation_id: "C1", task_id: "T1", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", error_class: "TOOL_FAILURE", summary: "bounded failure", retry_safe: false, intervention_required: true, preserved_state: [], recommended_recovery: "inspect bounded evidence" };
+    queueMicrotask(() => { child.stdout.end(`${JSON.stringify({ event: "result", result: { structured_output: payload } })}\n`); child.stderr.end(); child.emit("close", 0); });
+    return child;
+  }) as unknown as typeof spawn;
+  const lifecycle = await dispatchLifecycle(task, { agyPath: "agy", workspace: process.cwd(), taskSchemaPath: taskSchema, responseSchemaPath: ackSchema, spawnProcess }, errorSchema, "ERROR");
+  assert.equal(spawnCount, 2);
+  assert.equal(lifecycle.terminalOutcome, "ERROR");
+  assert.equal(lifecycle.terminal.payload.message_type, "ERROR");
+});
+
 test("rejects TASK_ASSIGN with an invalid created_at date-time", async () => {
   await assert.rejects(
     validateAgainstSchema({
@@ -185,4 +209,27 @@ test("rejects malformed or non-RESULT payloads against RESULT schema", async () 
     }, resultSchema),
     invalidDateError,
   );
+});
+
+test("rejects malformed, non-ERROR, and wrong-peer ERROR payloads", async () => {
+  const validError = { protocol: "ATCP-1", message_type: "ERROR", message_id: "M1", conversation_id: "C1", task_id: "T1", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", error_class: "TOOL_FAILURE", summary: "bounded", retry_safe: false, intervention_required: true, preserved_state: [], recommended_recovery: "recover" };
+  await validateAgainstSchema(validError, errorSchema);
+  await assert.rejects(validateAgainstSchema({ ...validError, message_type: "RESULT" }, errorSchema), invalidDateError);
+  const malformed = { ...validError }; delete (malformed as { summary?: string }).summary;
+  await assert.rejects(validateAgainstSchema(malformed, errorSchema), invalidDateError);
+  assert.throws(() => enforceResponseIdentity({ task_id: "T1", conversation_id: "C1", from: "Architect", to: "Antigravity-TL" }, { ...validError, from: "Unexpected" }), (error: unknown) => error instanceof BridgeError && error.code === "PEER_MISMATCH");
+});
+
+test("rejects a schema-valid ERROR with the wrong task_id at the parent boundary", async () => {
+  const request = { task_id: "T1", conversation_id: "C1", from: "Architect", to: "Antigravity-TL" };
+  const error = { protocol: "ATCP-1", message_type: "ERROR", message_id: "M1", conversation_id: "C1", task_id: "T-WRONG", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", error_class: "TOOL_FAILURE", summary: "bounded", retry_safe: false, intervention_required: true, preserved_state: [], recommended_recovery: "recover" };
+  await validateAgainstSchema(error, errorSchema);
+  assert.throws(() => enforceResponseIdentity(request, error), (caught: unknown) => caught instanceof BridgeError && caught.code === "CORRELATION_MISMATCH");
+});
+
+test("rejects a schema-valid ERROR with the wrong conversation_id at the parent boundary", async () => {
+  const request = { task_id: "T1", conversation_id: "C1", from: "Architect", to: "Antigravity-TL" };
+  const error = { protocol: "ATCP-1", message_type: "ERROR", message_id: "M1", conversation_id: "C-WRONG", task_id: "T1", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", error_class: "TOOL_FAILURE", summary: "bounded", retry_safe: false, intervention_required: true, preserved_state: [], recommended_recovery: "recover" };
+  await validateAgainstSchema(error, errorSchema);
+  assert.throws(() => enforceResponseIdentity(request, error), (caught: unknown) => caught instanceof BridgeError && caught.code === "CORRELATION_MISMATCH");
 });

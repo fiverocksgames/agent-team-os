@@ -17,7 +17,7 @@ TASK_ASSIGN JSON
     -> bounded PASS result
 ```
 
-The reference supports an ACK-only dispatch and the validated stateless lifecycle: `TASK_ASSIGN -> fresh ACK -> parent validation -> fresh RESULT -> parent validation`. The RESULT invocation replays the same validated task context; it does not use `--conversation` or `--continue`. `STATUS`, `ERROR`, `CANCEL`, persistent conversations, implementation authority, and Antigravity internal sub-agent control remain out of scope.
+The reference supports an ACK-only dispatch and the validated stateless lifecycle: `TASK_ASSIGN -> fresh ACK -> parent validation -> exactly one fresh RESULT or ERROR -> parent validation`. The terminal invocation replays the same validated task context; it does not use `--conversation` or `--continue`. `STATUS`, `CANCEL`, persistent conversations, implementation authority, and Antigravity internal sub-agent control remain out of scope.
 
 ## Runtime
 
@@ -47,6 +47,7 @@ Stateless ACK → RESULT lifecycle:
 ```powershell
 node .\reference\antigravity\bridge\dist\src\cli.js `
   --phase lifecycle `
+  --terminal result `
   --task .\atcp\v1\examples\task-assign.example.json `
   --workspace C:\path\to\target-workspace
 ```
@@ -61,14 +62,16 @@ Optional flags:
 - `--task-schema <path>`
 - `--response-schema <path>`
 - `--result-schema <path>`
+- `--error-schema <path>`
 - `--phase ack|lifecycle` (default `ack`)
+- `--terminal result|error` (lifecycle only; default `result`)
 
 ## Process and security contract
 
 The adapter:
 
 - uses a fresh `agy` invocation for each dispatch;
-- validates and records the parent-owned task identity/digest before ACK dispatch, gates RESULT on a validated ACK, and replays the same task context to a second fresh process;
+- validates and records the parent-owned task identity/digest before ACK dispatch, gates exactly one selected RESULT or ERROR terminal invocation on a validated accepted ACK, and replays the same task context to a second fresh process;
 - does not pass `--dangerously-skip-permissions`;
 - does not require `always-proceed`;
 - does not mutate Antigravity Desktop/IDE Security Presets;
