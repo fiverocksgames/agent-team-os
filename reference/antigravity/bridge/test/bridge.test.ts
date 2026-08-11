@@ -219,3 +219,17 @@ test("rejects malformed, non-ERROR, and wrong-peer ERROR payloads", async () => 
   await assert.rejects(validateAgainstSchema(malformed, errorSchema), invalidDateError);
   assert.throws(() => enforceResponseIdentity({ task_id: "T1", conversation_id: "C1", from: "Architect", to: "Antigravity-TL" }, { ...validError, from: "Unexpected" }), (error: unknown) => error instanceof BridgeError && error.code === "PEER_MISMATCH");
 });
+
+test("rejects a schema-valid ERROR with the wrong task_id at the parent boundary", async () => {
+  const request = { task_id: "T1", conversation_id: "C1", from: "Architect", to: "Antigravity-TL" };
+  const error = { protocol: "ATCP-1", message_type: "ERROR", message_id: "M1", conversation_id: "C1", task_id: "T-WRONG", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", error_class: "TOOL_FAILURE", summary: "bounded", retry_safe: false, intervention_required: true, preserved_state: [], recommended_recovery: "recover" };
+  await validateAgainstSchema(error, errorSchema);
+  assert.throws(() => enforceResponseIdentity(request, error), (caught: unknown) => caught instanceof BridgeError && caught.code === "CORRELATION_MISMATCH");
+});
+
+test("rejects a schema-valid ERROR with the wrong conversation_id at the parent boundary", async () => {
+  const request = { task_id: "T1", conversation_id: "C1", from: "Architect", to: "Antigravity-TL" };
+  const error = { protocol: "ATCP-1", message_type: "ERROR", message_id: "M1", conversation_id: "C-WRONG", task_id: "T1", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", error_class: "TOOL_FAILURE", summary: "bounded", retry_safe: false, intervention_required: true, preserved_state: [], recommended_recovery: "recover" };
+  await validateAgainstSchema(error, errorSchema);
+  assert.throws(() => enforceResponseIdentity(request, error), (caught: unknown) => caught instanceof BridgeError && caught.code === "CORRELATION_MISMATCH");
+});
