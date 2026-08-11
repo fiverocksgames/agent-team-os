@@ -16,6 +16,7 @@ export interface DispatchConfig {
   model?: string;
   agent?: string;
   effort?: "low" | "medium" | "high";
+  spawnProcess?: typeof spawn;
 }
 
 export interface DispatchEvidence {
@@ -83,6 +84,12 @@ export function enforceResponseIdentity(request: JsonObject, response: JsonObjec
   enforceCorrelation(request, response);
   if (typeof request.to !== "string" || typeof request.from !== "string" || response.from !== request.to || response.to !== request.from) {
     throw new BridgeError("PEER_MISMATCH", "response sender/recipient does not match the pending request");
+  }
+}
+
+export function enforceAcceptedAck(response: JsonObject): void {
+  if (response.accepted !== true || response.state !== "ACCEPTED") {
+    throw new BridgeError("ACK_NOT_ACCEPTED", "RESULT dispatch requires an accepted ACK in ACCEPTED state");
   }
 }
 
@@ -176,7 +183,7 @@ async function dispatchResponse(task: JsonObject, config: DispatchConfig, messag
   }
 
   const timeoutMs = config.timeoutMs ?? 300_000;
-  const child = spawn(config.agyPath, args, {
+  const child = (config.spawnProcess ?? spawn)(config.agyPath, args, {
     cwd: config.workspace,
     env,
     shell: false,
@@ -235,6 +242,7 @@ export async function dispatchResult(record: LifecycleRecord, config: DispatchCo
 export async function dispatchLifecycle(task: JsonObject, config: DispatchConfig, resultSchemaPath: string): Promise<LifecycleDispatchResult> {
   const record = await createLifecycleRecord(task, config.taskSchemaPath);
   const ack = await dispatchResponse(record.task, config, "ACK");
+  enforceAcceptedAck(ack.payload);
   const result = await dispatchResult(record, { ...config, responseSchemaPath: resultSchemaPath });
   return { record, ack, result };
 }

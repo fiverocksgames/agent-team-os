@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
+import { spawn } from "node:child_process";
+import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import test from "node:test";
-import { BridgeError, buildTlPrompt, createLifecycleRecord, enforceCorrelation, enforceResponseIdentity, extractStructuredOutput, validateAgainstSchema } from "../src/bridge.js";
+import { BridgeError, buildTlPrompt, createLifecycleRecord, dispatchLifecycle, enforceCorrelation, enforceResponseIdentity, extractStructuredOutput, validateAgainstSchema } from "../src/bridge.js";
 
 const bridgeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(bridgeDir, "..", "..", "..");
@@ -118,6 +121,39 @@ test("builds a RESULT-only prompt from replayed task context", () => {
   assert.match(prompt, /RESULT-only/);
   assert.match(prompt, /Do not use tools or modify files/);
   assert.match(prompt, /"task_id":"T1"/);
+});
+
+test("does not spawn RESULT after a schema-valid blocked ACK", async () => {
+  const task = {
+    protocol: "ATCP-1", message_type: "TASK_ASSIGN", message_id: "M1", conversation_id: "C1", task_id: "T1",
+    from: "Architect", to: "Antigravity-TL", created_at: "2026-08-11T00:00:00Z", objective: "ACK then RESULT", scope: [], deliverables: [],
+    constraints: [], acceptance_criteria: ["RESULT"], authority: { may_modify: false, may_commit: false, may_open_pr: false, may_merge: false },
+  };
+  let spawnCount = 0;
+  const spawnProcess = (() => {
+    spawnCount += 1;
+    const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; kill: () => boolean };
+    child.stdout = new PassThrough();
+    child.stderr = new PassThrough();
+    child.kill = () => true;
+    queueMicrotask(() => {
+      child.stdout.end(`${JSON.stringify({ event: "result", result: { structured_output: {
+        protocol: "ATCP-1", message_type: "ACK", message_id: "M2", conversation_id: "C1", task_id: "T1",
+        from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", accepted: false, state: "BLOCKED", summary: "blocked", missing_inputs: [],
+      } } })}\n`);
+      child.stderr.end();
+      child.emit("close", 0);
+    });
+    return child;
+  }) as unknown as typeof spawn;
+
+  await assert.rejects(
+    dispatchLifecycle(task, {
+      agyPath: "agy", workspace: process.cwd(), taskSchemaPath: taskSchema, responseSchemaPath: ackSchema, spawnProcess,
+    }, resultSchema),
+    (error: unknown) => error instanceof BridgeError && error.code === "ACK_NOT_ACCEPTED",
+  );
+  assert.equal(spawnCount, 1);
 });
 
 test("rejects TASK_ASSIGN with an invalid created_at date-time", async () => {
