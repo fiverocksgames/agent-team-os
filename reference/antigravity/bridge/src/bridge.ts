@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
@@ -15,6 +16,7 @@ export interface DispatchConfig {
   model?: string;
   agent?: string;
   effort?: "low" | "medium" | "high";
+  spawnProcess?: typeof spawn;
 }
 
 export interface DispatchEvidence {
@@ -29,6 +31,22 @@ export interface DispatchEvidence {
 export interface DispatchResult {
   payload: JsonObject;
   evidence: DispatchEvidence;
+}
+
+export interface LifecycleRecord {
+  task: JsonObject;
+  taskDigest: string;
+  taskId: string;
+  conversationId: string;
+  expectedFrom: string;
+  expectedTo: string;
+  authority: JsonObject;
+}
+
+export interface LifecycleDispatchResult {
+  record: LifecycleRecord;
+  ack: DispatchResult;
+  result: DispatchResult;
 }
 
 export class BridgeError extends Error {
@@ -60,6 +78,41 @@ export function enforceCorrelation(request: JsonObject, response: JsonObject): v
       throw new BridgeError("CORRELATION_MISMATCH", `${key} does not match pending request`);
     }
   }
+}
+
+export function enforceResponseIdentity(request: JsonObject, response: JsonObject): void {
+  enforceCorrelation(request, response);
+  if (typeof request.to !== "string" || typeof request.from !== "string" || response.from !== request.to || response.to !== request.from) {
+    throw new BridgeError("PEER_MISMATCH", "response sender/recipient does not match the pending request");
+  }
+}
+
+export function enforceAcceptedAck(response: JsonObject): void {
+  if (response.accepted !== true || response.state !== "ACCEPTED") {
+    throw new BridgeError("ACK_NOT_ACCEPTED", "RESULT dispatch requires an accepted ACK in ACCEPTED state");
+  }
+}
+
+export async function createLifecycleRecord(task: JsonObject, taskSchemaPath: string): Promise<LifecycleRecord> {
+  await validateAgainstSchema(task, taskSchemaPath);
+  const taskCopy = JSON.parse(JSON.stringify(task)) as JsonObject;
+  const required = ["task_id", "conversation_id", "from", "to"] as const;
+  if (required.some((key) => typeof taskCopy[key] !== "string") || !isObject(taskCopy.authority)) {
+    throw new BridgeError("INVALID_LIFECYCLE_RECORD", "validated TASK_ASSIGN is missing lifecycle identity or authority");
+  }
+  const immutableTask = deepFreezeJson(taskCopy);
+  if (!isObject(immutableTask.authority)) {
+    throw new BridgeError("INVALID_LIFECYCLE_RECORD", "immutable TASK_ASSIGN is missing authority");
+  }
+  return Object.freeze({
+    task: immutableTask,
+    taskDigest: createHash("sha256").update(JSON.stringify(taskCopy)).digest("hex"),
+    taskId: taskCopy.task_id as string,
+    conversationId: taskCopy.conversation_id as string,
+    expectedFrom: taskCopy.to as string,
+    expectedTo: taskCopy.from as string,
+    authority: immutableTask.authority,
+  });
 }
 
 export function extractStructuredOutput(lines: string[]): { payload: JsonObject; eventTypes: string[] } {
@@ -99,26 +152,30 @@ export function extractStructuredOutput(lines: string[]): { payload: JsonObject;
   return { payload: structured, eventTypes };
 }
 
-export function buildTlPrompt(task: JsonObject): string {
+export function buildTlPrompt(task: JsonObject, messageType: "ACK" | "RESULT" = "ACK"): string {
+  const phaseInstruction = messageType === "ACK"
+    ? "ACK-only: do not start implementation work."
+    : "RESULT-only: report bounded completion for the supplied task context; do not invent authority beyond it.";
   return [
     "You are the public Technical Lead boundary of an independent Antigravity software team.",
     "Return only the schema-conforming ATCP response requested by this invocation.",
     "Do not invent authority beyond the TASK_ASSIGN payload.",
-    "Do not use tools for this ACK-only reference milestone and do not modify files.",
+    phaseInstruction,
+    "Do not use tools or modify files in this reference validation slice.",
+    `Return an ATCP ${messageType} message only.`,
     "Preserve task_id and conversation_id exactly.",
     "TASK_ASSIGN:",
     JSON.stringify(task),
   ].join("\n");
 }
 
-export async function dispatchAck(task: JsonObject, config: DispatchConfig): Promise<DispatchResult> {
-  await validateAgainstSchema(task, config.taskSchemaPath);
+async function dispatchResponse(task: JsonObject, config: DispatchConfig, messageType: "ACK" | "RESULT"): Promise<DispatchResult> {
 
   const args = ["--output-format", "stream-json", "--json-schema", path.resolve(config.responseSchemaPath)];
   if (config.model) args.push("--model", config.model);
   if (config.agent) args.push("--agent", config.agent);
   if (config.effort) args.push("--effort", config.effort);
-  args.push("--print", buildTlPrompt(task));
+  args.push("--print", buildTlPrompt(task, messageType));
 
   const env = { ...process.env };
   for (const key of ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"]) {
@@ -126,7 +183,7 @@ export async function dispatchAck(task: JsonObject, config: DispatchConfig): Pro
   }
 
   const timeoutMs = config.timeoutMs ?? 300_000;
-  const child = spawn(config.agyPath, args, {
+  const child = (config.spawnProcess ?? spawn)(config.agyPath, args, {
     cwd: config.workspace,
     env,
     shell: false,
@@ -157,7 +214,7 @@ export async function dispatchAck(task: JsonObject, config: DispatchConfig): Pro
 
   const { payload, eventTypes } = extractStructuredOutput(stdout.split(/\r?\n/));
   await validateAgainstSchema(payload, config.responseSchemaPath);
-  enforceCorrelation(task, payload);
+  enforceResponseIdentity(task, payload);
 
   return {
     payload,
@@ -172,6 +229,35 @@ export async function dispatchAck(task: JsonObject, config: DispatchConfig): Pro
   };
 }
 
+export async function dispatchAck(task: JsonObject, config: DispatchConfig): Promise<DispatchResult> {
+  await validateAgainstSchema(task, config.taskSchemaPath);
+  return dispatchResponse(task, config, "ACK");
+}
+
+export async function dispatchResult(record: LifecycleRecord, config: DispatchConfig): Promise<DispatchResult> {
+  const resultConfig = { ...config, taskSchemaPath: config.taskSchemaPath };
+  return dispatchResponse(record.task, resultConfig, "RESULT");
+}
+
+export async function dispatchLifecycle(task: JsonObject, config: DispatchConfig, resultSchemaPath: string): Promise<LifecycleDispatchResult> {
+  const record = await createLifecycleRecord(task, config.taskSchemaPath);
+  const ack = await dispatchResponse(record.task, config, "ACK");
+  enforceAcceptedAck(ack.payload);
+  const result = await dispatchResult(record, { ...config, responseSchemaPath: resultSchemaPath });
+  return { record, ack, result };
+}
+
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function deepFreezeJson(value: JsonObject): JsonObject {
+  for (const [key, child] of Object.entries(value)) value[key] = deepFreezeValue(child);
+  return Object.freeze(value);
+}
+
+function deepFreezeValue(value: unknown): unknown {
+  if (isObject(value)) return deepFreezeJson(value);
+  if (Array.isArray(value)) return Object.freeze(value.map(deepFreezeValue));
+  return value;
 }

@@ -17,7 +17,7 @@ TASK_ASSIGN JSON
     -> bounded PASS result
 ```
 
-Only `TASK_ASSIGN -> ACK` is implemented. `STATUS`, `RESULT`, `ERROR`, `CANCEL`, persistent conversations, implementation authority, and Antigravity internal sub-agent control are intentionally out of scope for this milestone.
+The reference supports an ACK-only dispatch and the validated stateless lifecycle: `TASK_ASSIGN -> fresh ACK -> parent validation -> fresh RESULT -> parent validation`. The RESULT invocation replays the same validated task context; it does not use `--conversation` or `--continue`. `STATUS`, `ERROR`, `CANCEL`, persistent conversations, implementation authority, and Antigravity internal sub-agent control remain out of scope.
 
 ## Runtime
 
@@ -42,6 +42,15 @@ node .\reference\antigravity\bridge\dist\src\cli.js `
   --workspace C:\path\to\target-workspace
 ```
 
+Stateless ACK → RESULT lifecycle:
+
+```powershell
+node .\reference\antigravity\bridge\dist\src\cli.js `
+  --phase lifecycle `
+  --task .\atcp\v1\examples\task-assign.example.json `
+  --workspace C:\path\to\target-workspace
+```
+
 Optional flags:
 
 - `--agy <path>`
@@ -51,12 +60,15 @@ Optional flags:
 - `--effort low|medium|high`
 - `--task-schema <path>`
 - `--response-schema <path>`
+- `--result-schema <path>`
+- `--phase ack|lifecycle` (default `ack`)
 
 ## Process and security contract
 
 The adapter:
 
 - uses a fresh `agy` invocation for each dispatch;
+- validates and records the parent-owned task identity/digest before ACK dispatch, gates RESULT on a validated ACK, and replays the same task context to a second fresh process;
 - does not pass `--dangerously-skip-permissions`;
 - does not require `always-proceed`;
 - does not mutate Antigravity Desktop/IDE Security Presets;
@@ -66,6 +78,7 @@ The adapter:
 - treats stdout as JSONL and fails closed if a non-JSON line appears;
 - extracts only the empirically verified `$.result.structured_output` value;
 - validates both schema and correlation before returning PASS;
+- validates response sender/recipient against the pending TASK_ASSIGN boundary;
 - reports only whether stderr was present, not its raw contents;
 - applies a parent-side timeout and kills the child on expiry.
 
