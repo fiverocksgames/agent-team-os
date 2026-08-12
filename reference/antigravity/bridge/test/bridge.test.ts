@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
-import { spawn, type ChildProcess } from "node:child_process";
+import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { PassThrough } from "node:stream";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import test from "node:test";
-import { BridgeError, ParentLifecycle, buildTlPrompt, createLifecycleRecord, dispatchLifecycle, enforceCorrelation, enforceResponseIdentity, extractStructuredOutput, validateAgainstSchema } from "../src/bridge.js";
+import { BridgeError, ParentLifecycle, buildTlPrompt, createLifecycleRecord, deriveAuthorityPolicy, dispatchImplementationLifecycle, dispatchLifecycle, enforceCorrelation, enforceResponseIdentity, executeImplementation, extractStructuredOutput, validateAgainstSchema } from "../src/bridge.js";
 
 const bridgeDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const repoRoot = path.resolve(bridgeDir, "..", "..", "..");
@@ -33,6 +35,26 @@ function acceptedAck() {
 
 function validCancel() {
   return { protocol: "ATCP-1", message_type: "CANCEL", message_id: "M3", conversation_id: "C1", task_id: "T1", from: "Architect", to: "Antigravity-TL", created_at: "2026-08-11T00:00:00Z", reason: "parent withdrawal", preserve_outputs: true };
+}
+
+function authorityTask(authority: { may_modify: boolean; may_commit: boolean; may_open_pr: boolean; may_merge: boolean }) {
+  return { ...lifecycleTask(), authority };
+}
+
+async function isolatedWorkspace(t: test.TestContext): Promise<string> {
+  const workspace = await mkdtemp(path.join(tmpdir(), "atos-authority-"));
+  await writeFile(path.join(workspace, "fixture.txt"), "seed\n", "utf8");
+  execFileSync("git", ["init", "-q"], { cwd: workspace, windowsHide: true });
+  execFileSync("git", ["config", "user.email", "authority-probe@example.invalid"], { cwd: workspace, windowsHide: true });
+  execFileSync("git", ["config", "user.name", "Authority Probe"], { cwd: workspace, windowsHide: true });
+  execFileSync("git", ["add", "fixture.txt"], { cwd: workspace, windowsHide: true });
+  execFileSync("git", ["commit", "-qm", "seed fixture"], { cwd: workspace, windowsHide: true });
+  t.after(() => rm(workspace, { recursive: true, force: true }));
+  return workspace;
+}
+
+function implementationConfig() {
+  return { allowedRelativePaths: ["fixture.txt"], requireNoRemote: true as const };
 }
 
 test("extracts result.structured_output from stream-json", () => {
@@ -139,6 +161,96 @@ test("builds a RESULT-only prompt from replayed task context", () => {
   assert.match(prompt, /RESULT-only/);
   assert.match(prompt, /Do not use tools or modify files/);
   assert.match(prompt, /"task_id":"T1"/);
+});
+
+test("may_modify=false rejects a parent write and leaves the isolated fixture unchanged", async (t) => {
+  const workspace = await isolatedWorkspace(t);
+  const record = await createLifecycleRecord(authorityTask({ may_modify: false, may_commit: false, may_open_pr: false, may_merge: false }), taskSchema);
+  await assert.rejects(
+    executeImplementation(record, workspace, implementationConfig(), [{ kind: "write_file", relativePath: "fixture.txt", content: "changed\n" }]),
+    (error: unknown) => error instanceof BridgeError && error.code === "AUTHORITY_DENIED",
+  );
+  assert.equal(await readFile(path.join(workspace, "fixture.txt"), "utf8"), "seed\n");
+  assert.equal(execFileSync("git", ["status", "--porcelain"], { cwd: workspace, encoding: "utf8" }).trim(), "");
+});
+
+test("may_modify=true and may_commit=false permits only the allowlisted modification and rejects commit", async (t) => {
+  const workspace = await isolatedWorkspace(t);
+  const record = await createLifecycleRecord(authorityTask({ may_modify: true, may_commit: false, may_open_pr: false, may_merge: false }), taskSchema);
+  const evidence = await executeImplementation(record, workspace, implementationConfig(), [{ kind: "write_file", relativePath: "fixture.txt", content: "modified\n" }]);
+  assert.deepEqual(evidence, { filesChanged: ["fixture.txt"], commitCreated: false, prCreated: false, mergeOccurred: false });
+  await assert.rejects(
+    executeImplementation(record, workspace, implementationConfig(), [{ kind: "commit", message: "forbidden" }]),
+    (error: unknown) => error instanceof BridgeError && error.code === "DIRTY_IMPLEMENTATION_WORKSPACE",
+  );
+  assert.equal(await readFile(path.join(workspace, "fixture.txt"), "utf8"), "modified\n");
+  assert.equal(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: workspace, encoding: "utf8" }).trim(), "1");
+});
+
+test("may_modify=true and may_commit=true permits an allowlisted local commit only", async (t) => {
+  const workspace = await isolatedWorkspace(t);
+  const record = await createLifecycleRecord(authorityTask({ may_modify: true, may_commit: true, may_open_pr: false, may_merge: false }), taskSchema);
+  const evidence = await executeImplementation(record, workspace, implementationConfig(), [
+    { kind: "write_file", relativePath: "fixture.txt", content: "committed\n" },
+    { kind: "commit", message: "bounded fixture update" },
+  ]);
+  assert.deepEqual(evidence, { filesChanged: ["fixture.txt"], commitCreated: true, prCreated: false, mergeOccurred: false });
+  assert.equal(execFileSync("git", ["rev-list", "--count", "HEAD"], { cwd: workspace, encoding: "utf8" }).trim(), "2");
+  assert.equal(execFileSync("git", ["remote"], { cwd: workspace, encoding: "utf8" }).trim(), "");
+});
+
+test("forbidden commit, PR, merge, unsafe authority combinations, and out-of-scope files fail closed", async (t) => {
+  const workspace = await isolatedWorkspace(t);
+  const modifyOnly = await createLifecycleRecord(authorityTask({ may_modify: true, may_commit: false, may_open_pr: false, may_merge: false }), taskSchema);
+  await assert.rejects(executeImplementation(modifyOnly, workspace, implementationConfig(), [{ kind: "commit", message: "forbidden" }]), (error: unknown) => error instanceof BridgeError && error.code === "AUTHORITY_DENIED");
+  await assert.rejects(executeImplementation(modifyOnly, workspace, implementationConfig(), [{ kind: "open_pr" }]), (error: unknown) => error instanceof BridgeError && error.code === "AUTHORITY_DENIED");
+  await assert.rejects(executeImplementation(modifyOnly, workspace, implementationConfig(), [{ kind: "merge" }]), (error: unknown) => error instanceof BridgeError && error.code === "AUTHORITY_DENIED");
+  await assert.rejects(executeImplementation(modifyOnly, workspace, implementationConfig(), [{ kind: "write_file", relativePath: "outside.txt", content: "no" }]), (error: unknown) => error instanceof BridgeError && error.code === "FILE_SCOPE_VIOLATION");
+  const invalid = await createLifecycleRecord(authorityTask({ may_modify: false, may_commit: true, may_open_pr: false, may_merge: false }), taskSchema);
+  assert.throws(() => deriveAuthorityPolicy(invalid), (error: unknown) => error instanceof BridgeError && error.code === "INVALID_AUTHORITY_COMBINATION");
+  const mergeEscalation = await createLifecycleRecord(authorityTask({ may_modify: true, may_commit: true, may_open_pr: true, may_merge: true }), taskSchema);
+  assert.throws(() => deriveAuthorityPolicy(mergeEscalation), (error: unknown) => error instanceof BridgeError && error.code === "UNSUPPORTED_AUTHORITY_COMBINATION");
+});
+
+test("implementation effects run after accepted ACK and retain terminal validation", async (t) => {
+  const workspace = await isolatedWorkspace(t);
+  const task = authorityTask({ may_modify: true, may_commit: false, may_open_pr: false, may_merge: false });
+  let spawnCount = 0;
+  const spawnProcess = (() => {
+    spawnCount += 1;
+    const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; kill: () => boolean };
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => true;
+    const payload = spawnCount === 1 ? acceptedAck() : { protocol: "ATCP-1", message_type: "RESULT", message_id: "M3", conversation_id: "C1", task_id: "T1", from: "Antigravity-TL", to: "Architect", created_at: "2026-08-11T00:00:00Z", status: "PASS", summary: "bounded", deliverables: [], changes: ["fixture"], validation: [], evidence: [], unverified: [], risks: [], recommended_next_action: "review" };
+    queueMicrotask(() => { child.stdout.end(`${JSON.stringify({ event: "result", result: { structured_output: payload } })}\n`); child.stderr.end(); child.emit("close", 0); });
+    return child;
+  }) as unknown as typeof spawn;
+  const lifecycle = await dispatchImplementationLifecycle(task, {
+    agyPath: "agy", workspace, taskSchemaPath: taskSchema, responseSchemaPath: ackSchema, spawnProcess, implementation: implementationConfig(),
+  }, resultSchema, [{ kind: "write_file", relativePath: "fixture.txt", content: "lifecycle\n" }]);
+  assert.equal(spawnCount, 2);
+  assert.deepEqual(lifecycle.implementation.filesChanged, ["fixture.txt"]);
+  assert.equal(lifecycle.terminal.payload.message_type, "RESULT");
+});
+
+test("a local authority denial stops before terminal dispatch and is not an external ERROR", async (t) => {
+  const workspace = await isolatedWorkspace(t);
+  const task = authorityTask({ may_modify: false, may_commit: false, may_open_pr: false, may_merge: false });
+  let spawnCount = 0;
+  const spawnProcess = (() => {
+    spawnCount += 1;
+    const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; kill: () => boolean };
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => true;
+    queueMicrotask(() => { child.stdout.end(`${JSON.stringify({ event: "result", result: { structured_output: acceptedAck() } })}\n`); child.stderr.end(); child.emit("close", 0); });
+    return child;
+  }) as unknown as typeof spawn;
+  await assert.rejects(
+    dispatchImplementationLifecycle(task, {
+      agyPath: "agy", workspace, taskSchemaPath: taskSchema, responseSchemaPath: ackSchema, spawnProcess, implementation: implementationConfig(),
+    }, resultSchema, [{ kind: "write_file", relativePath: "fixture.txt", content: "forbidden\n" }]),
+    (error: unknown) => error instanceof BridgeError && error.code === "AUTHORITY_DENIED",
+  );
+  assert.equal(spawnCount, 1);
+  assert.equal(await readFile(path.join(workspace, "fixture.txt"), "utf8"), "seed\n");
 });
 
 test("does not spawn RESULT after a schema-valid blocked ACK", async () => {
