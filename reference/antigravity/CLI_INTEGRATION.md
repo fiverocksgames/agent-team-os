@@ -152,14 +152,13 @@ The parent Architect or adapter should:
 
 ## Validation status
 
-The minimum ACK transport and parent-side identity rejection are operationally proven for the tested local `agy` 1.1.11 environment.
+The bounded stateless `TASK_ASSIGN -> ACK -> RESULT | ERROR` reference lifecycle, parent-side identity rejection, and parent-local CANCEL coordination are operationally proven for the tested local `agy` 1.1.11/1.1.12 environments. The reference does not use `--conversation` or `--continue`.
 
 This does **not** yet prove:
 
-- terminal `RESULT` or `ERROR` round trips;
-- `STATUS` streaming semantics;
-- cancellation behavior;
+- trustworthy live `STATUS` streaming semantics;
+- external Antigravity-team cancellation acknowledgement/effect (the implemented CANCEL boundary is only parent-owned local process coordination);
 - persistent conversation/session reuse;
-- production implementation permissions or project safety.
+- production deployment, implementation permissions, or project safety.
 
 Those capabilities require separate bounded validation before they are claimed as supported.

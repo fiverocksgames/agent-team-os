@@ -17,7 +17,9 @@ TASK_ASSIGN JSON
     -> bounded PASS result
 ```
 
-The reference supports an ACK-only dispatch and the validated stateless lifecycle: `TASK_ASSIGN -> fresh ACK -> parent validation -> exactly one fresh RESULT or ERROR -> parent validation`. The terminal invocation replays the same validated task context; it does not use `--conversation` or `--continue`. `STATUS`, `CANCEL`, persistent conversations, implementation authority, and Antigravity internal sub-agent control remain out of scope.
+The reference supports an ACK-only dispatch and the validated stateless lifecycle: `TASK_ASSIGN -> fresh ACK -> parent validation -> exactly one fresh RESULT or ERROR -> parent validation`. The terminal invocation replays the same validated task context; it does not use `--conversation` or `--continue`. `STATUS`, persistent conversations, implementation authority, and Antigravity internal sub-agent control remain out of scope.
+
+`CANCEL` is limited to parent-owned coordination: a correlated parent intent can block a terminal child before spawn or terminate the exact child handle owned by the parent. It does not report or imply an external Antigravity-team acknowledgement, team cancellation effect, or artifact-preservation effect.
 
 ## Runtime
 

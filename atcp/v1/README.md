@@ -55,18 +55,20 @@ A schema-valid response with mismatched correlation identity must be rejected.
 
 ## Reference validation status
 
-The Antigravity CLI reference integration has empirically demonstrated the minimum ACK path with local `agy` 1.1.11:
+The Antigravity CLI reference integration has empirically demonstrated the following bounded stateless reference lifecycle with local `agy` 1.1.11 and 1.1.12 evidence:
 
 - schema-constrained structured output was produced;
 - the ACK validated against `schemas/ack.schema.json`;
 - `protocol == ATCP-1` was verified;
 - `message_type == ACK` was verified;
 - `task_id` and `conversation_id` preservation were verified;
-- a parent-side validator rejected a schema-valid ACK carrying an intentionally incorrect `task_id`.
+- a parent-side validator rejected a schema-valid ACK carrying an intentionally incorrect `task_id`;
+- after an accepted ACK, one fresh `RESULT` or one fresh `ERROR` terminal invocation validated against its schema and parent correlation boundary;
+- parent-owned `CANCEL` coordination blocked a terminal child before spawn and terminated only the exact parent-owned active child handle.
 
-For that tested transport, `stream-json` emitted the final structured value at `$.result.structured_output`.
+For that tested transport, `stream-json` emitted the final structured value at `$.result.structured_output`. The reference lifecycle has no persistent/session dependency and does not use `--conversation` or `--continue`.
 
-This path is implementation-specific transport evidence, not a protocol requirement for other transports.
+This path is implementation-specific transport evidence, not a protocol requirement for other transports. Its `CANCEL` behavior is local parent-process coordination only; it is not an acknowledgement that an external Antigravity team stopped work or preserved artifacts. `STATUS` is unsupported in this stateless reference because fresh invocations cannot provide trustworthy live progress observation.
 
 ## Versioning
 
@@ -76,10 +78,10 @@ This path is implementation-specific transport evidence, not a protocol requirem
 
 The ACK and correlation requirements are now operationally demonstrated by at least one reference integration. Before ATCP v1 is declared stable, reference integrations still need bounded evidence for at least:
 
-1. terminal `RESULT` or `ERROR` round trip;
-2. `STATUS` behavior where streaming/progress reporting is supported;
-3. cancellation behavior or an explicitly documented unsupported capability;
-4. authority-boundary behavior for an implementation-capable task;
-5. any claimed persistent-conversation/session reuse behavior.
+1. trustworthy live `STATUS` behavior where a transport provides an actual progress source;
+2. external-team cancellation acknowledgement/effect, if a transport publicly exposes it;
+3. authority-boundary behavior for an implementation-capable task;
+4. any claimed persistent-conversation/session reuse behavior;
+5. production deployment, operations, and safety readiness.
 
 A capability that is not yet tested must remain explicitly unproven rather than being inferred from the ACK result.
