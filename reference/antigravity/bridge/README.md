@@ -85,6 +85,10 @@ The adapter:
 - reports only whether stderr was present, not its raw contents;
 - applies a parent-side timeout and kills the child on expiry.
 
+## CANCEL scope
+
+The parent can validate and record a correlated `CANCEL` intent, block a terminal child that has not started, and terminate only an exact child process handle it owns. This is local process coordination, not an acknowledgement that Antigravity's team stopped work or preserved external artifacts.
+
 The bridge does not grant project modification authority. The canonical ACK fixture explicitly forbids implementation and tool use.
 
 ## Workspace selection
