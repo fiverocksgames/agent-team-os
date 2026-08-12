@@ -304,3 +304,53 @@ test("CANCEL terminates only the exact parent-owned child and kill failure stays
   failed.recordAcceptedAck(acceptedAck()); failed.beginTerminal({ kill: () => false } as unknown as ChildProcess);
   await assert.rejects(failed.requestCancel(validCancel(), cancelSchema), (error: unknown) => error instanceof BridgeError && error.code === "LOCAL_TERMINATION_FAILED");
 });
+
+test("CANCEL before terminal spawn prevents a real dispatch seam from spawning its terminal child", async () => {
+  let spawnCount = 0;
+  const spawnProcess = (() => {
+    spawnCount += 1;
+    const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; kill: () => boolean };
+    child.stdout = new PassThrough(); child.stderr = new PassThrough(); child.kill = () => true;
+    queueMicrotask(() => { child.stdout.end(`${JSON.stringify({ event: "result", result: { structured_output: acceptedAck() } })}\n`); child.stderr.end(); child.emit("close", 0); });
+    return child;
+  }) as unknown as typeof spawn;
+  await assert.rejects(
+    dispatchLifecycle(lifecycleTask(), {
+      agyPath: "agy", workspace: process.cwd(), taskSchemaPath: taskSchema, responseSchemaPath: ackSchema, spawnProcess,
+      beforeTerminalSpawn: async (lifecycle) => { await lifecycle.requestCancel(validCancel(), cancelSchema); },
+    }, resultSchema),
+    (error: unknown) => error instanceof BridgeError && error.code === "CANCELLATION_COMMITTED",
+  );
+  assert.equal(spawnCount, 1);
+});
+
+test("CANCEL during a real terminal dispatch kills its exact child once and commits no success", async () => {
+  let spawnCount = 0;
+  let killCount = 0;
+  let lifecycle: ParentLifecycle | undefined;
+  const spawnProcess = (() => {
+    spawnCount += 1;
+    const child = new EventEmitter() as EventEmitter & { stdout: PassThrough; stderr: PassThrough; kill: () => boolean };
+    child.stdout = new PassThrough(); child.stderr = new PassThrough();
+    if (spawnCount === 1) {
+      child.kill = () => true;
+      queueMicrotask(() => { child.stdout.end(`${JSON.stringify({ event: "result", result: { structured_output: acceptedAck() } })}\n`); child.stderr.end(); child.emit("close", 0); });
+    } else {
+      child.kill = () => { killCount += 1; queueMicrotask(() => { child.stdout.end(); child.stderr.end(); child.emit("close", -1); }); return true; };
+      queueMicrotask(async () => { await lifecycle!.requestCancel(validCancel(), cancelSchema); });
+    }
+    return child;
+  }) as unknown as typeof spawn;
+  await assert.rejects(
+    dispatchLifecycle(lifecycleTask(), {
+      agyPath: "agy", workspace: process.cwd(), taskSchemaPath: taskSchema, responseSchemaPath: ackSchema, spawnProcess,
+      onLifecycleCreated: (created) => { lifecycle = created; },
+    }, resultSchema),
+    (error: unknown) => error instanceof BridgeError && error.code === "CANCELLATION_COMMITTED",
+  );
+  assert.equal(spawnCount, 2);
+  assert.equal(killCount, 1);
+  const repeated = await lifecycle!.requestCancel(validCancel(), cancelSchema);
+  assert.equal(repeated.idempotent, true);
+  assert.equal(killCount, 1);
+});

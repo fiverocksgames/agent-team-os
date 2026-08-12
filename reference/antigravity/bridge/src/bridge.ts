@@ -18,6 +18,8 @@ export interface DispatchConfig {
   agent?: string;
   effort?: "low" | "medium" | "high";
   spawnProcess?: typeof spawn;
+  beforeTerminalSpawn?: (lifecycle: ParentLifecycle) => Promise<void> | void;
+  onLifecycleCreated?: (lifecycle: ParentLifecycle) => void;
 }
 
 export interface DispatchEvidence {
@@ -134,6 +136,15 @@ export class ParentLifecycle {
     this.state = "TERMINAL_ACTIVE";
   }
 
+  registerTerminalChild(child: ChildProcess): void {
+    if (this.state === "CANCELLED") {
+      if (!child.kill()) throw new BridgeError("LOCAL_TERMINATION_FAILED", "parent could not terminate a child spawned after CANCEL");
+      throw new BridgeError("CANCELLATION_COMMITTED", "CANCEL prevents terminal child ownership");
+    }
+    if (this.state !== "TERMINAL_ACTIVE") throw new BridgeError("INVALID_LIFECYCLE_STATE", "terminal child is not legal in the current lifecycle state");
+    this.activeChild = child;
+  }
+
   commitTerminal(): void {
     if (this.state === "CANCELLED") throw new BridgeError("CANCELLATION_COMMITTED", "CANCEL owns this lifecycle");
     if (this.state !== "TERMINAL_ACTIVE") throw new BridgeError("INVALID_LIFECYCLE_STATE", "terminal completion is not legal in the current lifecycle state");
@@ -234,7 +245,7 @@ export function buildTlPrompt(task: JsonObject, messageType: "ACK" | TerminalOut
   ].join("\n");
 }
 
-async function dispatchResponse(task: JsonObject, config: DispatchConfig, messageType: "ACK" | TerminalOutcome): Promise<DispatchResult> {
+async function dispatchResponse(task: JsonObject, config: DispatchConfig, messageType: "ACK" | TerminalOutcome, onChildSpawned?: (child: ChildProcess) => void): Promise<DispatchResult> {
 
   const args = ["--output-format", "stream-json", "--json-schema", path.resolve(config.responseSchemaPath)];
   if (config.model) args.push("--model", config.model);
@@ -255,6 +266,7 @@ async function dispatchResponse(task: JsonObject, config: DispatchConfig, messag
     windowsHide: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
+  onChildSpawned?.(child);
 
   let stdout = "";
   let stderr = "";
@@ -310,13 +322,21 @@ export async function dispatchError(record: LifecycleRecord, config: DispatchCon
 export async function dispatchLifecycle(task: JsonObject, config: DispatchConfig, terminalSchemaPath: string, terminalOutcome: TerminalOutcome = "RESULT"): Promise<LifecycleDispatchResult> {
   const record = await createLifecycleRecord(task, config.taskSchemaPath);
   const lifecycle = new ParentLifecycle(record);
+  config.onLifecycleCreated?.(lifecycle);
   const ack = await dispatchResponse(record.task, config, "ACK");
   lifecycle.recordAcceptedAck(ack.payload);
+  await config.beforeTerminalSpawn?.(lifecycle);
   lifecycle.beginTerminal();
   const terminalConfig = { ...config, responseSchemaPath: terminalSchemaPath };
-  const terminal = terminalOutcome === "RESULT"
-    ? await dispatchResult(record, terminalConfig)
-    : await dispatchError(record, terminalConfig);
+  let terminal: DispatchResult;
+  try {
+    terminal = terminalOutcome === "RESULT"
+      ? await dispatchResponse(record.task, terminalConfig, "RESULT", (child) => lifecycle.registerTerminalChild(child))
+      : await dispatchResponse(record.task, terminalConfig, "ERROR", (child) => lifecycle.registerTerminalChild(child));
+  } catch (error) {
+    if (lifecycle.getState() === "CANCELLED") throw new BridgeError("CANCELLATION_COMMITTED", "CANCEL owns this lifecycle");
+    throw error;
+  }
   lifecycle.commitTerminal();
   return { record, ack, terminalOutcome, terminal };
 }
