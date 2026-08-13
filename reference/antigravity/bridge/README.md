@@ -17,9 +17,13 @@ TASK_ASSIGN JSON
     -> bounded PASS result
 ```
 
-The reference supports an ACK-only dispatch and the validated stateless lifecycle: `TASK_ASSIGN -> fresh ACK -> parent validation -> exactly one fresh RESULT or ERROR -> parent validation`. The terminal invocation replays the same validated task context; it does not use `--conversation` or `--continue`. `STATUS`, persistent conversations, implementation authority, and Antigravity internal sub-agent control remain out of scope.
+The reference supports an ACK-only dispatch and the validated stateless lifecycle: `TASK_ASSIGN -> fresh ACK -> parent validation -> exactly one fresh RESULT or ERROR -> parent validation`. The terminal invocation replays the same validated task context; it does not use `--conversation` or `--continue`. `STATUS`, persistent conversations, and Antigravity internal sub-agent control remain out of scope.
 
 `CANCEL` is limited to parent-owned coordination: a correlated parent intent can block a terminal child before spawn or terminate the exact child handle owned by the parent. It does not report or imply an external Antigravity-team acknowledgement, team cancellation effect, or artifact-preservation effect.
+
+## Bounded implementation authority
+
+The optional implementation seam is parent-owned, not model-owned. It derives boolean operation bits from the immutable validated `TASK_ASSIGN.authority`, requires a clean no-remote isolated Git workspace and an explicit relative-file allowlist, then verifies local Git effects. It can apply only allowlisted file writes and an optional local commit. PR creation and merge are not implemented; they remain fail-closed even if a future task requests them. Guardrail/process failures stay local bridge failures and are not emitted as ATCP `ERROR` messages.
 
 ## Runtime
 
