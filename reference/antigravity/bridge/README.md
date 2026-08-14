@@ -1,6 +1,6 @@
 # Antigravity ATCP Bridge — Reference Vertical Slice
 
-Status: experimental reference implementation for ATOS Phase 2.
+Status: experimental reference implementation through ATOS Phase 3.
 
 This directory contains the smallest executable bridge between a parent ATCP orchestrator and a local Antigravity CLI Team Lead boundary.
 

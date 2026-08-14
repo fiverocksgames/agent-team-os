@@ -1,15 +1,27 @@
-# ATOS Bootstrap
+# ATOS Bootstrap Router
 
-This is the minimal entry point for an AI agent joining an ATOS-governed project.
+This is the minimal entry point for an AI agent joining an ATOS-governed project. It routes an agent to the smallest role- and task-relevant read set; it is not an instruction to read the entire repository.
 
-## Read order
+## Choose a role path
 
-1. Read this file.
-2. Read `governance/TEAM_CHARTER.md`.
-3. Read the role contract assigned to you, if one exists under `roles/`.
-4. Read the adopting project's local `AGENTS.md`, policy hierarchy, and project charter.
-5. Read the current project handoff and only the task-specific architecture, requirements, and evidence needed for the assignment.
-6. Begin work only after restating your role, objective, scope, deliverables, constraints, and unresolved questions.
+1. Read this router after the repository [README](../README.md).
+2. Identify the assigned durable role. Tool, model, vendor, and session are implementation details, not the role.
+3. Follow exactly one applicable role entry:
+   - [Architect bootstrap](ARCHITECT.md): planning, authority preservation, task-contract preparation, and the first Codex handoff.
+   - [Codex orchestrator bootstrap](CODEX_ORCHESTRATOR.md): transport/orchestration after an Architect handoff, including the bounded `ATOS -> agy` route.
+   - For another role, read the relevant section of [role contracts](../roles/ROLE_CONTRACTS.md), then the adopting project's task-specific sources.
+4. Read the adopting project's local `AGENTS.md`, policy hierarchy, project charter, current handoff, and task-specific source of truth only when the chosen path directs it.
+5. Before acting, restate role, objective, scope, deliverables, constraints, current state, and open questions. Report a material gap instead of inventing it.
+
+## Selective read graph
+
+```text
+README -> this router -> role entry
+                       -> canonical ATOS documents required for the task
+                       -> adopting product repository policy/handoff/task source of truth
+```
+
+The product repository owns product architecture, build/test commands, security constraints, and task-specific evidence. ATOS supplies reusable operating knowledge; adoption does not require copying ATOS governance into every product repository.
 
 ## Operating rules
 

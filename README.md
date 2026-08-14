@@ -6,6 +6,21 @@ It defines how AI teams are governed, how responsibilities are separated from to
 
 ATOS is not a project template. Projects reference ATOS for common operating rules and keep project-specific architecture, product policy, safety constraints, and implementation details in their own repositories.
 
+## Start here: selective, role-aware bootstrap
+
+This README is a navigator, not a repository-wide manual. Do **not** preload every ATOS document. Start with [bootstrap/BOOTSTRAP.md](bootstrap/BOOTSTRAP.md), select the path for your role, then read only the capability/protocol documents required by the current task and its source of truth.
+
+```text
+README
+  -> bootstrap/BOOTSTRAP.md
+       -> Architect: bootstrap/ARCHITECT.md
+       -> Codex orchestrator: bootstrap/CODEX_ORCHESTRATOR.md
+  -> role-required canonical documents
+  -> target product repository and task-specific source of truth
+```
+
+For a memoryless Architect who must prepare the first relay to Codex, use [the Architect path](bootstrap/ARCHITECT.md). For a memoryless Codex receiving that relay, use [the Codex orchestrator path](bootstrap/CODEX_ORCHESTRATOR.md). These paths preserve the distinction between product/task authority and the reusable ATOS operating contract.
+
 ## Core principles
 
 1. The repository, not conversation history, owns durable project knowledge.
@@ -68,16 +83,7 @@ This project follows ATOS.
 Read the ATOS bootstrap first, then this repository's local AGENTS.md and project documentation.
 ```
 
-A new agent should conceptually read:
-
-1. the project's bootstrap pointer to ATOS;
-2. the applicable ATOS bootstrap and governance documents;
-3. its assigned role contract;
-4. the project's local `AGENTS.md` / policy hierarchy;
-5. current machine-readable handoff;
-6. task-specific architecture, requirements, and evidence.
-
-Do not preload unrelated role or domain documents.
+A new agent should use the role-aware [bootstrap router](bootstrap/BOOTSTRAP.md), then load the adopting project's local policy hierarchy, current handoff, and only the task-specific architecture, requirements, and evidence needed for the assignment. Do not preload unrelated role or domain documents.
 
 ## ATCP
 
