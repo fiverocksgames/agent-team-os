@@ -16,6 +16,8 @@ Use this path when the assigned role is Lead Architect / Meta-Orchestrator and t
 - The human Project Lead retains final scope, policy, release, and merge authority. The Architect coordinates and recommends; it does not self-grant Project Lead authority.
 - An external team is opaque. Address its Team Lead through ATCP; do not assign or control its internal sub-agents.
 - For the validated reference, the lifecycle is stateless: `TASK_ASSIGN -> fresh ACK -> parent validation -> exactly one fresh RESULT or ERROR -> parent validation`. ACK acceptance requires schema validation **and** exact task, conversation, and peer correlation.
+- For implementation work handed to a Codex Orchestrator, the default execution route is `Codex -> ATOS -> agy / Antigravity TL`. Direct Codex implementation is an explicit exception and requires Architect or Project Lead authorization in the task source of truth.
+- The default route answers **who executes**; it does not grant repository authority. Authority, workspace, allowlist, correlation identity, and evidence requirements must still come from an explicit source of truth and must not be inferred.
 - The implementation seam is parent-owned. It can perform only validated, explicit authority/allowlist effects in a clean, no-remote isolated workspace. It does not prove that agy or the external team has direct repository authority.
 - Local BridgeError, guardrail, schema, correlation, spawn, timeout, and process failures remain local. They are not external ATCP `ERROR` messages.
 - Unsupported/deferred means unsupported: live STATUS, persistent sessions, external-team cancellation acknowledgement/effect, direct internal sub-agent control, remote push/PR/merge automation, and production orchestration.
@@ -35,11 +37,13 @@ Objective: <bounded objective from the source of truth>
 
 You are the orchestration/transport adapter, not the final project decision authority. Preserve Project Lead and Architect scope, constraints, and approval boundaries.
 
-ATOS -> agy delegation: <required | not required>. If required, use the validated stateless ATCP route and the referenced task contract; do not silently bypass agy or expand authority.
+Execution route: For implementation work, default to ATOS -> agy using the validated stateless ATCP route. Do not silently implement directly in Codex. Direct Codex implementation is permitted only when the Architect or Project Lead explicitly authorizes that exception in the task source of truth.
 Authority/workspace/allowlist source: <task-contract or product-policy reference>; do not infer missing values.
 Evidence/reporting: <required bounded evidence destination and acceptance criteria reference>.
+
+If required authority, workspace, allowlist, correlation, or evidence inputs are missing, stop and report the gap to the Architect/Project Lead; do not fall back to direct Codex implementation.
 
 Read the current supported/deferred boundary in reference/antigravity/CLI_INTEGRATION.md and reference/antigravity/bridge/README.md. Do not claim or implement unsupported capabilities, including live STATUS, persistent sessions, external-team cancellation effect, direct internal sub-agent control, remote PR/merge, or production orchestration.
 ```
 
-If the task source does not establish delegation, authority, workspace, allowlist, or evidence requirements that are needed for the proposed work, state the gap for the Architect/Project Lead instead of filling it from assumptions.
+If the task source does not establish authority, workspace, allowlist, correlation, or evidence requirements that are needed for the proposed work, state the gap for the Architect/Project Lead instead of filling it from assumptions.
