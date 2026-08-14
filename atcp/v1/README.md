@@ -65,6 +65,7 @@ The Antigravity CLI reference integration has empirically demonstrated the follo
 - a parent-side validator rejected a schema-valid ACK carrying an intentionally incorrect `task_id`;
 - after an accepted ACK, one fresh `RESULT` or one fresh `ERROR` terminal invocation validated against its schema and parent correlation boundary;
 - parent-owned `CANCEL` coordination blocked a terminal child before spawn and terminated only the exact parent-owned active child handle.
+- the Phase 3 parent-owned implementation seam enforced validated authority bits, a clean no-remote isolated workspace, an explicit file allowlist, bounded local writes, and an optional local commit. It did not grant direct repository authority to the transport or external team; see the [bridge boundary](../../reference/antigravity/bridge/README.md).
 
 For that tested transport, `stream-json` emitted the final structured value at `$.result.structured_output`. The reference lifecycle has no persistent/session dependency and does not use `--conversation` or `--continue`.
 
@@ -80,7 +81,7 @@ The ACK and correlation requirements are now operationally demonstrated by at le
 
 1. trustworthy live `STATUS` behavior where a transport provides an actual progress source;
 2. external-team cancellation acknowledgement/effect, if a transport publicly exposes it;
-3. authority-boundary behavior for an implementation-capable task;
+3. authority behavior beyond the bounded, parent-owned implementation seam already evidenced by the reference bridge;
 4. any claimed persistent-conversation/session reuse behavior;
 5. production deployment, operations, and safety readiness.
 
